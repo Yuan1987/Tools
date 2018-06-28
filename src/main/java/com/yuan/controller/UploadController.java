@@ -6,6 +6,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.Cell;
@@ -30,10 +31,9 @@ public class UploadController {
 
     @ApiOperation(value = "excelToJson")
     @PostMapping("/excelToJson")
-    public List<Map<String,String>> excelToJson(MultipartFile file) throws Exception {
+    public Map<String,List<Map<String, String>>> excelToJson(MultipartFile file) throws Exception {
         
-        
-        List<Map<String, String>> data = null;
+        Map<String,List<Map<String, String>>> data = null;
         
         String filename = file.getOriginalFilename();
         
@@ -41,46 +41,57 @@ public class UploadController {
             return data;
         }
         
-        List<List<String>> listob = null;
+        Map<String,List<List<String>>> sheetMap = null;
         try(InputStream in = file.getInputStream()){
             
-            listob = this.getBankListByExcel(in, file.getOriginalFilename());
+            sheetMap = this.getBankListByExcel(in, file.getOriginalFilename());
 
-            data = new ArrayList<>();
+            data = new LinkedHashMap<>();
             
-            for (int i = 1; i < listob.size(); i++) {
+            Iterator<Entry<String, List<List<String>>>> sheetIt = sheetMap.entrySet().iterator();
+            
+            while(sheetIt.hasNext()) {
+                Entry<String, List<List<String>>> en = sheetIt.next();
                 
-                Map<String, String> map = new LinkedHashMap<>();
+                List<List<String>> listob = en.getValue();
+                
+                List<Map<String, String>> sheetList =new ArrayList<>();
+                
+                for (int i = 1; i < listob.size(); i++) {
+                    
+                    Map<String, String> map = new LinkedHashMap<>();
 
-                try {
-                    List<String> lo = listob.get(0);
+                    try {
+                        List<String> lo = listob.get(0);
 
-                    for (String key : lo) {
-                        map.put(key.trim(), "");
+                        for (String key : lo) {
+                            map.put(key.trim(), "");
+                        }
+
+                    } catch (Exception e) {
+                        e.printStackTrace();
                     }
 
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+                    try {
+                        List<String> lo = listob.get(i);
+                        
+                        Iterator<String> it= map.keySet().iterator();
+                        
+                        for (String val : lo) {
+                            
+                            String key =it.next();
+                            
+                            System.out.println(key +"==" +val);
+                            map.put(key, val);
+                        }
+                        
+                        sheetList.add(map);
 
-                try {
-                    List<String> lo = listob.get(i);
-                    
-                    Iterator<String> it= map.keySet().iterator();
-                    
-                    for (String val : lo) {
-                        
-                        String key =it.next();
-                        
-                        System.out.println(key +"==" +val);
-                        map.put(key, val);
+                    } catch (Exception e) {
+                        e.printStackTrace();
                     }
-                    
-                    data.add(map);
-
-                } catch (Exception e) {
-                    e.printStackTrace();
                 }
+                data.put(en.getKey(), sheetList);
             }
         }
         return data;
@@ -106,8 +117,10 @@ public class UploadController {
         return wb;
     }
 
-    public List<List<String>> getBankListByExcel(InputStream in, String fileName) throws Exception {
-        List<List<String>> list = null;
+    public Map<String,List<List<String>>> getBankListByExcel(InputStream in, String fileName) throws Exception {
+        
+        
+        Map<String,List<List<String>>> sheetMap =new LinkedHashMap<>(16);
 
         // 创建Excel工作薄
         Workbook work = this.getWorkbook(in, fileName);
@@ -117,23 +130,22 @@ public class UploadController {
         Sheet sheet = null;
         Row row = null;
         Cell cell = null;
-
-        list = new ArrayList<List<String>>();
-        // 遍历Excel中所有的sheet
+        
         for (int i = 0; i < work.getNumberOfSheets(); i++) {
             sheet = work.getSheetAt(i);
             if (sheet == null) {
                 continue;
             }
-
-            // 遍历当前sheet中的所有行
+            
+            List<List<String>> list = new ArrayList<>();
+            
             for (int j = sheet.getFirstRowNum(); j < sheet.getLastRowNum() + 1; j++) {
+                
                 row = sheet.getRow(j);
-                if (row == null || row.getFirstCellNum() == j) {//跳过取第一行表头的数据内容了
+                if (row == null /*|| row.getFirstCellNum() == j*/) {
                     continue;
                 }
 
-                // 遍历所有的列
                 List<String> li = new ArrayList<String>();
                 for (int y = row.getFirstCellNum(); y < row.getLastCellNum(); y++) {
                     cell = row.getCell(y);
@@ -145,8 +157,8 @@ public class UploadController {
                 }
                 list.add(li);
             }
+            sheetMap.put(sheet.getSheetName(), list);
         }
-        //work.close();
-        return list;
+        return sheetMap;
     }
 }
